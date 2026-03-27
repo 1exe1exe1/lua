@@ -181,34 +181,6 @@ local guiVisible           = false
 local dragEnabled          = false
 local activeTabName        = "Main"
 
--- Temporal features state
-local rainbowSkyEnabled  = false
-local rainbowSkyH        = 0
-local sprayPaintEnabled  = false
-local sprayPaintText     = "cool sandbox game!"
-local deleteClickAura    = false
-local _dcaBox            = nil
-local _dcaPos            = nil
-local showEnlightens     = false
-local showInvis          = false
-local selectedBlockMode  = false
-local selectedBlock      = nil
-local _tempBbId          = ""
-local _tempBbNames       = {
-    SuperFlyGoldBoombox=true, BoomboxGearThree=true,
-    DualGoldenSuperFlyBoombox=true, DubstepBoombox=true, BeatUpBoombox=true,
-}
-local _dcaRayParams = RaycastParams.new()
-_dcaRayParams.FilterType = Enum.RaycastFilterType.Exclude
-local _sprayOverlapParams = nil
-local _overlapSupported   = false
-pcall(function()
-    _sprayOverlapParams = OverlapParams.new()
-    _sprayOverlapParams.FilterType = Enum.RaycastFilterType.Exclude
-    _overlapSupported = true
-end)
-
-
 -- ── SHARED BRIDGE ────────────────────────────────────────────
 shared.sendChat         = shared.sendChat or nil
 shared.GriefLog         = shared.GriefLog or ""
@@ -451,9 +423,9 @@ TitleLabel.ZIndex             = 7
 TitleLabel.Parent             = TopBar
 
 -- FPS label in title (like sigma)
-RunService.RenderStepped:Connect(function(dt)
+RunService.RenderStepped:Connect(function()
     if guiVisible then
-        TitleLabel.Text = "Sigma Panel  |  " .. math.floor(1 / dt) .. " fps  |  " .. #Players:GetPlayers() .. " players"
+        TitleLabel.Text = "Sigma Panel  |  " .. math.floor(1 / task.wait()) .. " fps  |  " .. #Players:GetPlayers() .. " players"
     end
 end)
 
@@ -1204,14 +1176,6 @@ do
             pcall(function() TeleportService:TeleportToPlaceInstance(PLACE_ID, bestId, lp) end)
         end)
     end)
-
-    makeButtonRow(srvGroup, "JoinVC", function()
-        pcall(function() game.ReplicatedStorage.System:FireServer("vc") end)
-    end)
-
-    makeButtonRow(srvGroup, "JoinOG", function()
-        pcall(function() game.ReplicatedStorage.System:FireServer("og") end)
-    end)
 end
 
 do
@@ -1630,32 +1594,6 @@ do
             end
         end)
     end)
-
-    -- Enlightened Users ESP
-    makeToggleRow(espGroup, "Enlightened ESP", function(on)
-        showEnlightens = on
-        if not on then
-            for _, p in pairs(Players:GetPlayers()) do
-                if p.Character then
-                    local h = p.Character:FindFirstChild("enlightenHighlight")
-                    if h then h:Destroy() end
-                end
-            end
-        end
-    end)
-
-    -- Invisible Users ESP
-    makeToggleRow(espGroup, "Invisible ESP", function(on)
-        showInvis = on
-        if not on then
-            for _, p in pairs(Players:GetPlayers()) do
-                if p.Character then
-                    local ui = p.Character:FindFirstChild("invisAlert")
-                    if ui then ui:Destroy() end
-                end
-            end
-        end
-    end)
 end
 
 do
@@ -1708,18 +1646,6 @@ do
             end)
         end
     end)
-end
-
-
-do
-    local skyGroup = makeGroup(visualPage, "Rainbow Sky")
-    makeToggleRow(skyGroup, "Rainbow Sky", function(on) rainbowSkyEnabled = on end)
-end
-
-do
-    local sprayGroup = makeGroup(visualPage, "Spray Paint")
-    makeInputRow(sprayGroup, "Spray Text", "cool sandbox game!", function(t) sprayPaintText = t end)
-    makeToggleRow(sprayGroup, "Enable Spray Paint", function(on) sprayPaintEnabled = on end)
 end
 
 -- ─────────────────────────────────────────────────────────────
@@ -1825,45 +1751,6 @@ do
             setNC(false); root.CFrame=orig
         end)
     end)
-end
-
-
-do
-    local extraAuraGroup = makeGroup(aurasPage, "Extra Tools")
-
-    -- Block Selector
-    local _selLbl = nil
-    makeButtonRow(extraAuraGroup, "Select Block (click)", function()
-        selectedBlockMode = true
-        notify("Panel", "Click a block to select it!")
-    end)
-    makeButtonRow(extraAuraGroup, "Clear Block Selection", function()
-        selectedBlock = nil
-        notify("Panel", "Block selection cleared.")
-    end)
-
-    -- Delete Click Aura
-    makeToggleRow(extraAuraGroup, "Delete Click Aura", function(on)
-        deleteClickAura = on
-        if not on then
-            _dcaPos = nil
-            if _dcaBox and _dcaBox.Parent then _dcaBox:Destroy() end
-            _dcaBox = nil
-        end
-    end)
-
-    -- Boombox Detector
-    local _bbLbl = makeSection(extraAuraGroup, "Boombox: none selected")
-    makeButtonRow(extraAuraGroup, "Copy Boombox ID", function()
-        if _tempBbId ~= "" then
-            pcall(function() setclipboard(_tempBbId) end)
-            notify("Panel", "Copied: " .. _tempBbId)
-        else
-            notify("Panel", "No boombox selected!")
-        end
-    end)
-    -- expose label so unified handler can update it
-    shared._bbLbl = _bbLbl
 end
 
 -- ─────────────────────────────────────────────────────────────
@@ -2464,11 +2351,7 @@ do
             }
             local nchex = {}
             for k,v in pairs(namecolors) do
-                local c = Color3.fromRGB(v[1], v[2], v[3])
-                nchex[k] = string.format("#%02X%02X%02X",
-                    math.floor(c.R*255+0.5),
-                    math.floor(c.G*255+0.5),
-                    math.floor(c.B*255+0.5))
+                nchex[k] = "#"..Color3.fromRGB(table.unpack(v)):ToHex()
             end
             TextChatService.OnIncomingMessage = function(mdata)
                 local plr = mdata.TextSource and mdata.TextSource.UserId and Players:GetPlayerByUserId(mdata.TextSource.UserId)
@@ -2485,7 +2368,7 @@ do
                 local v = namecolors[cn] or {255,255,255}
                 local icon = ""
                 if spychat then
-                    if hidden then icon="[H] " elseif muted then icon="[M] " end
+                    if hidden then icon="🚫 " elseif muted then icon="🤐 " end
                 end
                 mdata.PrefixText = string.format('<font color="%s">%s(%s) </font>', hex, icon, plr.DisplayName)
             end
@@ -2528,7 +2411,7 @@ do
                 if p ~= lp and p.Character then
                     p.Character.ChildAdded:Connect(function(item)
                         if item.Name=="The Arkenstone" and enlightenLogEnabled then
-                            sendChat("[*] "..p.DisplayName.." received enlighten")
+                            sendChat("🌟"..p.DisplayName.." received enlighten")
                         end
                     end)
                 end
@@ -2560,14 +2443,6 @@ do
         else
             if nnConn then nnConn:Disconnect(); nnConn=nil end
         end
-    end)
-end
-
-
-do
-    local iqGroup = makeGroup(tcoPage, "IQ Tag in Chat")
-    makeToggleRow(iqGroup, "Show IQ Tags", function(on)
-        shared._iqTagEnabled = on
     end)
 end
 
@@ -2657,180 +2532,6 @@ do
     verLbl.TextXAlignment=Enum.TextXAlignment.Left; verLbl.ZIndex=8; verLbl.Parent=infoGroup
 end
 
-
--- ─────────────────────────────────────────────────────────────
--- TEMPORAL FEATURES: unified click handler + runtime loops
--- ─────────────────────────────────────────────────────────────
-
--- ONE InputBegan connection handles block selector, boombox, spray paint, DCA
-UserInputService.InputBegan:Connect(function(input, processed)
-    if input.UserInputType ~= Enum.UserInputType.MouseButton1 then return end
-    local mouse = lp:GetMouse()
-
-    -- Block selector
-    if not processed and selectedBlockMode then
-        if mouse.Target and mouse.Target:IsA("BasePart") then
-            selectedBlock = mouse.Target
-            notify("Panel", "Selected: " .. mouse.Target.Name)
-        end
-        selectedBlockMode = false
-        return
-    end
-
-    -- Boombox detector
-    if not processed and mouse.Target then
-        local par = mouse.Target.Parent
-        if par and _tempBbNames[par.Name] then
-            local sound = par:FindFirstChild("Sound", true)
-            if sound and sound.SoundId and sound.SoundId ~= "" then
-                _tempBbId = sound.SoundId:match("id=(%d+)") or sound.SoundId
-                if shared._bbLbl then shared._bbLbl.Text = "Boombox ID: " .. _tempBbId end
-            else
-                _tempBbId = ""
-                if shared._bbLbl then shared._bbLbl.Text = "Boombox: no sound" end
-            end
-        end
-    end
-
-    -- Spray paint
-    if not processed and sprayPaintEnabled and _overlapSupported then
-        local hitPos = mouse.Hit.Position
-        local ev = equipAndGetEvent("Paint")
-        if ev then
-            _sprayOverlapParams.FilterDescendantsInstances = { Workspace.Terrain, lp.Character }
-            local parts = Workspace:GetPartBoundsInBox(CFrame.new(hitPos), Vector3.new(4,4,4), _sprayOverlapParams)
-            local col = Color3.fromHSV(rainbowSkyH, 1, 1)
-            for _, part in ipairs(parts) do
-                if part:IsA("BasePart") then
-                    pcall(function()
-                        ev:FireServer(part, Enum.NormalId.Top, hitPos, HANDSHAKE, col, "spray", sprayPaintText)
-                    end)
-                end
-            end
-        end
-    end
-
-    -- Delete Click Aura: record click position
-    if not processed and deleteClickAura then
-        local char = lp.Character
-        if char then _dcaRayParams.FilterDescendantsInstances = { char } end
-        local camCF = Workspace.CurrentCamera.CFrame
-        local res = Workspace:Raycast(camCF.Position, (mouse.Hit.Position - camCF.Position).Unit * 1000, _dcaRayParams)
-        if res then _dcaPos = res.Position end
-    end
-end)
-
--- Rainbow Sky loop
-task.spawn(function()
-    while true do
-        task.wait(0.05)
-        if not rainbowSkyEnabled then continue end
-        rainbowSkyH = (rainbowSkyH + 0.005) % 1
-        local col = Color3.fromHSV(rainbowSkyH, 1, 1)
-        local ev = equipAndGetEvent("Paint")
-        if ev then
-            pcall(function()
-                ev:FireServer(Workspace.Terrain, Enum.NormalId.Top,
-                    Vector3.new(9468, 3084, 707), HANDSHAKE, col, "neon", "")
-            end)
-        end
-    end
-end)
-
--- Delete Click Aura loop
-task.spawn(function()
-    local _dcaOverlap = nil
-    pcall(function()
-        _dcaOverlap = OverlapParams.new()
-        _dcaOverlap.FilterType = Enum.RaycastFilterType.Exclude
-    end)
-    while true do
-        task.wait(0.1)
-        if not deleteClickAura or not _dcaPos then continue end
-        if not _dcaBox or not _dcaBox.Parent then
-            _dcaBox = Instance.new("Part")
-            _dcaBox.Name = "DeleteClickAura"
-            _dcaBox.Size = Vector3.new(20,20,20)
-            _dcaBox.Anchored = true
-            _dcaBox.CanCollide = false
-            _dcaBox.Transparency = 0.65
-            _dcaBox.Color = Color3.fromRGB(255,0,0)
-            _dcaBox.Material = Enum.Material.Neon
-            _dcaBox.Parent = Workspace
-        end
-        _dcaBox.CFrame = CFrame.new(_dcaPos)
-        local char = lp.Character
-        local hrp = char and char:FindFirstChild("HumanoidRootPart")
-        local delEv = equipAndGetEvent("Delete")
-        if delEv and hrp and _dcaOverlap then
-            _dcaOverlap.FilterDescendantsInstances = { _dcaBox, char }
-            local parts = Workspace:GetPartBoundsInBox(_dcaBox.CFrame, _dcaBox.Size, _dcaOverlap)
-            local brickFolder = Workspace:FindFirstChild("Bricks")
-            for _, part in ipairs(parts) do
-                if part:IsA("BasePart") and part ~= _dcaBox then
-                    if not brickFolder or part:IsDescendantOf(brickFolder) then
-                        pcall(function() delEv:FireServer(part, hrp.Position) end)
-                    end
-                end
-            end
-        end
-    end
-end)
-
--- Enlightened / Invisible ESP loop
-task.spawn(function()
-    while true do
-        task.wait(0.5)
-        if not showEnlightens and not showInvis then continue end
-        for _, p in pairs(Players:GetPlayers()) do
-            if p == lp or not p.Character then continue end
-            local char = p.Character
-            if showEnlightens then
-                local hasArken = (p.Backpack and p.Backpack:FindFirstChild("The Arkenstone"))
-                              or char:FindFirstChild("The Arkenstone")
-                if hasArken then
-                    if not char:FindFirstChild("enlightenHighlight") then
-                        local h = Instance.new("Highlight")
-                        h.Name = "enlightenHighlight"
-                        h.FillColor = Color3.fromRGB(0,187,255)
-                        h.FillTransparency = 0.5
-                        h.OutlineColor = Color3.fromRGB(0,220,255)
-                        h.OutlineTransparency = 0
-                        h.Parent = char
-                    end
-                else
-                    local h = char:FindFirstChild("enlightenHighlight")
-                    if h then h:Destroy() end
-                end
-            end
-            if showInvis then
-                local torso = char:FindFirstChild("UpperTorso") or char:FindFirstChild("Torso")
-                local isInvis = torso and torso.Transparency >= 0.9
-                local existing = char:FindFirstChild("invisAlert")
-                if isInvis and not existing then
-                    local bb = Instance.new("BillboardGui")
-                    bb.Name = "invisAlert"
-                    bb.Size = UDim2.new(0,220,0,40)
-                    bb.AlwaysOnTop = true
-                    bb.StudsOffset = Vector3.new(0,3,0)
-                    bb.Adornee = char:FindFirstChild("Head") or char:FindFirstChild("HumanoidRootPart")
-                    bb.Parent = char
-                    local lbl2 = Instance.new("TextLabel")
-                    lbl2.Size = UDim2.new(1,0,1,0)
-                    lbl2.BackgroundTransparency = 1
-                    lbl2.Text = "[INVIS] " .. p.Name
-                    lbl2.TextColor3 = Color3.fromRGB(255,50,0)
-                    lbl2.TextScaled = true
-                    lbl2.FontFace = FONT_MAIN
-                    lbl2.Parent = bb
-                elseif not isInvis and existing then
-                    existing:Destroy()
-                end
-            end
-        end
-    end
-end)
-
 -- ─────────────────────────────────────────────────────────────
 -- RUNTIME LOOPS
 -- ─────────────────────────────────────────────────────────────
@@ -2900,11 +2601,6 @@ task.spawn(function()
         local char = lp.Character
         local hrp  = char and char:FindFirstChild("HumanoidRootPart")
         if not hrp then task.wait(0.05) continue end
-
-        -- Idle guard: skip all heavy work if no home aura feature is active
-        if not rainbow and not shovel and not deleteAura and not killAura and not detailedPath then
-            task.wait(0.05) continue
-        end
 
         -- Keep char excluded up-to-date each frame
         _homeRayParams.FilterDescendantsInstances = {char}
@@ -3001,11 +2697,6 @@ task.spawn(function()
         local char = lp.Character
         local hrp  = char and char:FindFirstChild("HumanoidRootPart")
         if not hrp then task.wait(0.05) continue end
-
-        -- Idle guard: skip all heavy work if no advanced aura feature is active
-        if not buildAura and not signAura and not paintAura and not deleteAuraAdv then
-            task.wait(0.05) continue
-        end
 
         auraH = (auraH + auraRainbowSpeed) % 1
         local col = Color3.fromHSV(auraH, 1, 1)
