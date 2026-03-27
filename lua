@@ -2901,6 +2901,11 @@ task.spawn(function()
         local hrp  = char and char:FindFirstChild("HumanoidRootPart")
         if not hrp then task.wait(0.05) continue end
 
+        -- Idle guard: skip all heavy work if no home aura feature is active
+        if not rainbow and not shovel and not deleteAura and not killAura and not detailedPath then
+            task.wait(0.05) continue
+        end
+
         -- Keep char excluded up-to-date each frame
         _homeRayParams.FilterDescendantsInstances = {char}
 
@@ -2996,6 +3001,11 @@ task.spawn(function()
         local char = lp.Character
         local hrp  = char and char:FindFirstChild("HumanoidRootPart")
         if not hrp then task.wait(0.05) continue end
+
+        -- Idle guard: skip all heavy work if no advanced aura feature is active
+        if not buildAura and not signAura and not paintAura and not deleteAuraAdv then
+            task.wait(0.05) continue
+        end
 
         auraH = (auraH + auraRainbowSpeed) % 1
         local col = Color3.fromHSV(auraH, 1, 1)
